@@ -54,10 +54,6 @@ class Client(object):
         . mutateCategories(ArrayOfCategoryMutate listofCategoryMutates, )
     """
 
-    CLIENT = soapclient(
-        'https://advertising.criteo.com/API/v201305/AdvertiserService.asmx?WSDL',
-    )
-
     def __init__(self, username, password, token, client_version=None,
                  loglevel='INFO'):
         """
@@ -69,14 +65,17 @@ class Client(object):
             client_version:
             loglevel:
         """
+        self.__client = soapclient(
+        'https://advertising.criteo.com/API/v201305/AdvertiserService.asmx?WSDL',
+        )
         self.username = username
         headers = self._make_type('apiHeader')
-        headers.authToken = self.CLIENT.service.clientLogin(
+        headers.authToken = self.__client.service.clientLogin(
             username, password, client_version
         )
         headers.appToken = token
         headers.clientVersion = client_version
-        self.CLIENT.set_options(soapheaders=headers)
+        self.__client.set_options(soapheaders=headers)
         self.logging(loglevel)
 
     def clientLogin(self, username, password, source):
@@ -86,7 +85,7 @@ class Client(object):
                         xs:string password,
                         xs:string source)
         """
-        return self.CLIENT.service.clientLogin(
+        return self.__client.service.clientLogin(
             username, password, source
         )
 
@@ -95,7 +94,7 @@ class Client(object):
         SOAP Method:
             getAccount()
         """
-        return self.CLIENT.service.getAccount()
+        return self.__client.service.getAccount()
 
     def getBudgets(self, budgetSelector):
         """
@@ -109,7 +108,7 @@ class Client(object):
         if not isinstance(budgetSelector, dict):
             raise TypeError('budgetSelector must be a dictionary')
         selector = self._make_type('BudgetSelectors')
-        return self.CLIENT.service.getBudgets(
+        return self.__client.service.getBudgets(
             _assign(budgetSelector, selector)
         )
 
@@ -128,7 +127,7 @@ class Client(object):
         if not isinstance(campaignSelector, dict):
             raise TypeError('campaignSelector must be a dictionary')
         selector = self._make_type('CampaignSelectors')
-        return self.CLIENT.service.getCampaigns(
+        return self.__client.service.getCampaigns(
             _assign(campaignSelector, selector)
         )
 
@@ -137,7 +136,7 @@ class Client(object):
         SOAP Method:
             getCatalogsNames()
         """
-        return self.CLIENT.service.getCatalogsNames()
+        return self.__client.service.getCatalogsNames()
 
     def getCategories(self, categorySelector):
         """
@@ -152,7 +151,7 @@ class Client(object):
         if not isinstance(categorySelector, dict):
             raise TypeError('categorySelector must be a dictionary')
         selector = self._make_type('CategorySelectors')
-        return self.CLIENT.service.getCategories(
+        return self.__client.service.getCategories(
             _assign(categorySelector, selector)
         )
 
@@ -166,21 +165,21 @@ class Client(object):
             wait: time to wait for the response, in seconds
         """
         time.sleep(wait)
-        return self.CLIENT.service.getJobStatus(job_id)
+        return self.__client.service.getJobStatus(job_id)
 
     def getReportDownloadUrl(self, jobID):
         """
         SOAP Method:
             getReportDownloadUrl(xs:long jobID, )
         """
-        return self.CLIENT.service.getReportDownloadUrl(jobID)
+        return self.__client.service.getReportDownloadUrl(jobID)
 
     def getStatisticsLastUpdate(self):
         """
         SOAP Method:
             getStatisticsLastUpdate()
         """
-        return self.CLIENT.service.getAccount()
+        return self.__client.service.getAccount()
 
     def mutateCampaigns(self, CampaignMutates):
         """
@@ -204,7 +203,7 @@ class Client(object):
                          xs:string password,
                          xs:string source)
         """
-        return self.CLIENT.service.partnerLogin(
+        return self.__client.service.partnerLogin(
             username, password, source
         )
 
@@ -230,7 +229,7 @@ class Client(object):
         if not isinstance(reportJob, dict):
             raise TypeError('reportJob must be a dictionary')
         report = self._make_type('ReportJob')
-        return self.CLIENT.service.scheduleReportJob(
+        return self.__client.service.scheduleReportJob(
             _assign(reportJob, report)
         )
 
@@ -241,15 +240,8 @@ class Client(object):
             jobID: jobID
             path: path to destination csv file
         """
-        while True:
-            if not self.CLIENT.service.getJobStatus(jobID) == 'Pending':
-                break
 
-        table = etree.parse(
-            urlopen(self.getReportDownloadUrl(jobID))
-        ).getroot().getchildren()[0]
-
-        rows = [i for i in table if i.tag == 'rows'][0]
+        rows = self.get_report(jobID)
 
         with open(path, 'wb') as rep:
             wr = csv.DictWriter(rep, set([f for r in rows for f in r.keys()]))
@@ -258,8 +250,24 @@ class Client(object):
             for row in rows:
                 wr.writerow(row.attrib)
 
+    def get_report(self, jobID):
+        """
+        Utility method for downloading a report in list of dict's.
+        Args:
+            jobID: jobID
+        """
+        while True:
+            if not self.__client.service.getJobStatus(jobID) == 'Pending':
+                break
+
+        table = etree.parse(
+            urlopen(self.getReportDownloadUrl(jobID))
+        ).getroot().getchildren()[0]
+
+        return [i for i in table if i.tag == 'rows'][0]
+
     def _make_type(self, object_name):
-        return self.CLIENT.factory.create(object_name)
+        return self.__client.factory.create(object_name)
 
     def logging(self, log_level='DEBUG'):
         """
